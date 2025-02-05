@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       issues: write
-      # Ensure that the token has at least read:org permissions if needed.
       contents: read
     steps:
       - name: Checkout repository
