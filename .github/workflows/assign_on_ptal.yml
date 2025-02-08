@@ -3,9 +3,6 @@ name: Assign Reviewers on PTAL Comment
 on:
   issue_comment:
     types: [created]
-  push:
-    branches:
-      - develop
 
 jobs:
   assign-reviewers:
@@ -189,13 +186,13 @@ jobs:
           EOF
 
   report-failure:
-    if: github.event_name == 'push' && github.repository == 'oppia/oppia'
+    needs: assign-reviewers
     runs-on: ubuntu-22.04
+    if: ${{ always() && needs.assign-reviewers.result == 'failure' }}
     steps:
       - name: Checkout repository so that local actions can be used
         uses: actions/checkout@v4
-      - name: Report failure if failed on oppia/oppia develop branch
-        if: ${{ failure() && github.ref == 'refs/heads/develop' }}
+      - name: Report failure if workflow failed
         uses: ./.github/actions/send-webhook-notification
         with:
           message: "A typescript test failed on the upstream develop branch."
