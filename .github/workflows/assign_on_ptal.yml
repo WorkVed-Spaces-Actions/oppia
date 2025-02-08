@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions: 
       pull-requests: write
+      issues: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # GITHUB_EVENT_PATH is automatically set by GitHub Actions.
