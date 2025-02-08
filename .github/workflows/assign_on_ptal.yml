@@ -1,0 +1,179 @@
+name: Assign Reviewers on PTAL Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  assign-reviewers:
+    if: github.event.issue.pull_request != null
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Run reviewer assignment script
+        uses: actions/github-script@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          script: |
+            (async () => {
+              const { getOctokit, context } = require('@actions/github');
+              const github = getOctokit(process.env.GITHUB_TOKEN);
+            
+              // ------------------------------
+              // Helper functions for sanitization
+              // ------------------------------
+            
+              /**
+               * Sanitizes a string using a provided regex pattern.
+               * Returns the trimmed string if it matches; otherwise returns an empty string.
+               */
+              function sanitizeString(input, allowedRegex) {
+                if (typeof input !== 'string') return '';
+                const trimmed = input.trim();
+                return allowedRegex.test(trimmed) ? trimmed : '';
+              }
+            
+              /**
+               * Sanitize a GitHub username.
+               * Allowed characters: alphanumerics, underscore, and hyphen.
+               */
+              function sanitizeUsername(username) {
+                const allowedRegex = /^[\w-]+$/;
+                return sanitizeString(username, allowedRegex);
+              }
+            
+              /**
+               * Sanitize repository names.
+               * Allowed characters: alphanumerics, underscore, hyphen, and dot.
+               */
+              function sanitizeRepo(repo) {
+                const allowedRegex = /^[A-Za-z0-9_.-]+$/;
+                return sanitizeString(repo, allowedRegex);
+              }
+            
+              /**
+               * Sanitize repository owner (typically a GitHub login).
+               */
+              function sanitizeOwner(owner) {
+                const allowedRegex = /^[A-Za-z0-9_.-]+$/;
+                return sanitizeString(owner, allowedRegex);
+              }
+            
+              // ------------------------------
+              // Step 1: Retrieve and sanitize PR and repository info
+              // ------------------------------
+            
+              // Get PR number from the issue event payload (only process if it's a PR comment)
+              const prNumberRaw = context.payload.issue && context.payload.issue.number;
+              const prNumber = parseInt(prNumberRaw, 10);
+              if (isNaN(prNumber)) {
+                console.log('Invalid or missing PR number. Exiting.');
+                process.exit(0);
+              }
+            
+              // Get and sanitize repository and owner information
+              const repoRaw = context.payload.repository && context.payload.repository.name;
+              const ownerRaw = context.payload.repository &&
+                               context.payload.repository.owner &&
+                               context.payload.repository.owner.login;
+              const repo = sanitizeRepo(repoRaw);
+              const owner = sanitizeOwner(ownerRaw);
+              if (!repo || !owner) {
+                console.log('Invalid repository or owner information. Exiting.');
+                process.exit(0);
+              }
+            
+              // ------------------------------
+              // Step 2: Sanitize and extract reviewers from the comment
+              // ------------------------------
+            
+              // Get the comment body and trim it
+              const commentRaw = context.payload.comment && context.payload.comment.body;
+              const comment = commentRaw ? commentRaw.trim() : '';
+              if (!comment) {
+                console.log('Empty comment. Nothing to do.');
+                process.exit(0);
+              }
+            
+              // Regex explanation:
+              // - ((?:@[\w-]+(?:\s*,\s*)?)+): Matches one or more @mentions (optionally separated by commas)
+              // - \s*(ptal|take a pass|please review)\b: Matches one of the trigger phrases after optional whitespace.
+              const structuredRegex = /((?:@[\w-]+(?:\s*,\s*)?)+)\s*(ptal|take a pass|please review)\b/i;
+              const match = comment.match(structuredRegex);
+              if (!match) {
+                console.log('No valid PTAL trigger with a structured list of reviewers was found in the comment.');
+                process.exit(0);
+              }
+            
+              // Extract the list of reviewers (e.g. "@alice, @bob") and sanitize each username.
+              const reviewersRaw = match[1]; // This contains the at-mentions
+              const reviewerMatches = reviewersRaw.match(/@([\w-]+)/g);
+              let reviewers = [];
+              if (reviewerMatches) {
+                reviewers = reviewerMatches
+                  .map(r => sanitizeUsername(r.substring(1))) // Remove '@' and sanitize
+                  .filter(r => r !== '');
+              }
+              if (reviewers.length === 0) {
+                console.log('No valid reviewers found after sanitization. Exiting.');
+                process.exit(0);
+              }
+              console.log(`Reviewers extracted and sanitized: ${reviewers.join(', ')}`);
+            
+              // ------------------------------
+              // Step 3: Get current assignees on the PR
+              // ------------------------------
+            
+              let currentAssignees = [];
+              try {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: prNumber
+                });
+                // Sanitize current assignees as well.
+                currentAssignees = pr.assignees.map(a => sanitizeUsername(a.login));
+              } catch (error) {
+                console.error('Error fetching PR details:', error);
+                process.exit(1);
+              }
+            
+              // ------------------------------
+              // Step 4: Merge current assignees with the new reviewers
+              // ------------------------------
+            
+              // Merge the current assignees with the new reviewers (do not remove any existing assignees).
+              const newAssignees = Array.from(new Set([...currentAssignees, ...reviewers]));
+              console.log(`Updating PR #${prNumber} with the following assignees: ${newAssignees.join(', ')}`);
+              try {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  assignees: newAssignees
+                });
+                console.log('Assignees updated successfully.');
+              } catch (error) {
+                console.error('Error updating PR assignees:', error);
+                process.exit(1);
+              }
+            
+              // ------------------------------
+              // Step 5: Post a confirmation comment
+              // ------------------------------
+            
+              // Set a fixed confirmation message.
+              const confirmationMessage = "Assigning ${reviewers.map(u => '@' + u).join(', ')} for the first pass review of this PR. Thanks!";
+              try {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  body: confirmationMessage
+                });
+                console.log('Posted confirmation comment successfully.');
+              } catch (error) {
+                console.error('Error posting confirmation comment:', error);
+                process.exit(1);
+              }
+            })();
