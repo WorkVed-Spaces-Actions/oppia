@@ -1,0 +1,54 @@
+name: Full Stack Test Comment
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  full_stack_tests_completed:
+    name: Full Stack Test Completed
+    runs-on: ubuntu-22.04
+    outputs:
+      conclusion: ${{ steps.wait-for-full-stack-test.outputs.conclusion }}
+    steps:
+      - name: Wait for Full Stack Test to complete
+        id: wait-for-full-stack-test
+        uses: ArcticLampyrid/action-wait-for-workflow@v1.2.0
+        with:
+          workflow: full_stack_tests.yml
+          sha: auto
+          allowed-conclusions: |
+            success
+            failure
+            action_required
+
+      - name: Conclusion Analysis
+        if: ${{ steps.wait-for-full-stack-test.outputs.conclusion == 'action_required' }}
+        run: |
+          echo "::error::First-time contributor workflows require manual approval. After approval, please re-run the comment workflows to post the report."
+          exit 1
+
+  full_stack_test_report:
+    name: Full Stack Test Report
+    needs: full_stack_tests_completed
+    permissions:
+      pull-requests: write
+    # Only run if the workflow finished and its conclusion is 'failure'
+    if: ${{ !cancelled() && needs.full_stack_tests_completed.outputs.conclusion == 'failure' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Leave a comment on the PR if the workflow failed
+        uses: ./.github/actions/post-comment
+        with:
+          owner: ${{ github.event.repository.owner.login }}
+          repo: ${{ github.event.repository.name }}
+          issue_number: ${{ github.event.number }}
+          message: >
+            🛠️ Hi @${{ github.event.pull_request.user.login }}, it looks like
+            the CI checks are failing on your PR. Please look at the logs and
+            follow [these instructions](https://github.com/oppia/oppia/wiki/If-CI-checks-fail-on-your-PR#introduction)
+            to fix them, or report the error as a flake. Thanks!
