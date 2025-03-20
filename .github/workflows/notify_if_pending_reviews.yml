@@ -8,7 +8,6 @@ on:
   # So, we add the workflow_dispatch event here to allow triggering this
   # workflow manually if needed.
   workflow_dispatch:
-permissions: read-all
 
 jobs:
   send_notifications:
