@@ -618,12 +618,12 @@ var StoryEditorPage = function () {
     await action.click('Chapter Title Button', chapterTitleButton);
   };
 
-  this.expectNodeOutlineToMatch = async function (nodeOutline) {
-    var nodeOutlineEditorRteContent =
-      await nodeOutlineEditorRteContentSelector();
-    var outlineEditorRteContentText =
-      await nodeOutlineEditorRteContent[0].getText();
-    expect(outlineEditorRteContentText).toEqual(nodeOutline);
+  this.expectNodeOutlineTextToMatch = async function(nodeOutline) {
+    var nodeOutlineEditorRteContent = (
+      await nodeOutlineEditorRteContentSelector());
+    var outlineEditorRteContentText = (
+      await nodeOutlineEditorRteContent[0].getText());
+    expect( outlineEditorRteContentText).toEqual(nodeOutline);
   };
 
   this.expectExplorationIdAlreadyExistWarning = async function () {
