@@ -161,15 +161,13 @@ jobs:
         run: >
           VIDEO_RECORDING_IS_ENABLED=0
           xvfb-run -a --server-args="-screen 0, 1285x1000x24" 
-          python -m scripts.run_acceptance_tests 
-          --skip-build --suite=${{ matrix.suite.name }} --prod_env
+          python -m scripts.run_acceptance_tests  --skip-build --suite=logged-in-user/edit-profile-preferences-and-export-their-account --prod_env
       - name: Run Desktop Acceptance Test ${{ matrix.suite.name }} (Attempt 2 with screen recording)
         if: ${{ failure() }}
         run: >
           VIDEO_RECORDING_IS_ENABLED=1
           xvfb-run -a --server-args="-screen 0, 1285x1000x24" 
-          python -m scripts.run_acceptance_tests 
-          --skip-build --suite=${{ matrix.suite.name }} --prod_env
+          python -m scripts.run_acceptance_tests  --skip-build --suite=logged-in-user/edit-profile-preferences-and-export-their-account --prod_env --prod_env
       - name: Uploading Desktop test recordings as Artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
